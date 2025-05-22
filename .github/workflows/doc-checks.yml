@@ -1,0 +1,47 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Doc-Checks
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push or pull request events but only for the main branch
+  push:
+    branches: [ main ]
+    paths:
+      - "**.md"
+      - "**.MD"
+      - ".github/workflows/doc-checks.yml"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "**.md"
+      - "**.MD"
+      - ".github/workflows/doc-checks.yml"
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: [self-hosted, linux, x64, philips-code-hub, ubuntu-latest]
+    name: Check Markdown
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3.4.1
+        with:
+          node-version: "14"
+
+      - name: install tools
+        run: |
+          npm install markdownlint-cli
+
+      - name: Check syntax & style
+        run: |
+          ./node_modules/.bin/markdownlint ./ --ignore node_modules
