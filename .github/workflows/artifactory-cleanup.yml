@@ -1,0 +1,30 @@
+---
+    name: Artifact cleanup
+
+    # schedule job run at the end of every day
+    on:
+      schedule:
+        - cron: "0 0 * * *"
+      # Allows you to run this workflow manually from the Actions tab
+      workflow_dispatch:
+
+    jobs:
+      clean:
+        runs-on: [ self-hosted, linux, x64, philips-code-hub, ubuntu-latest ]
+        steps:
+          - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # ratchet:actions/checkout@v4.2.2
+          - name: Setting up JFrog CLI
+            uses: jfrog/setup-jfrog-cli@ff5cb544114ffc152db9cea1cd3d5978d5074946 # ratchet:jfrog/setup-jfrog-cli@v4
+            with:
+              disable-job-summary: true  # ...Error: The process '...' failed with exit code 1
+          - name: Print JFROG Cli version
+            run: |
+              jf --version
+          - name: Add remote art
+            run: |
+                  jf c add art --artifactory-url=https://artifactory-ehv.ta.philips.com/artifactory/ --user=${{ secrets.NUGET_USER }} --password=${{ secrets.NUGET_PASSWORD }} --interactive=false
+          - run: |
+              # Removed older than x days files
+              jf rt del --quiet=true --spec BuildConfig/Artifactory/CleanupAlpha.json
+              jf rt del --quiet=true --spec BuildConfig/Artifactory/CleanupPR.json
+              jf rt del --quiet=true --spec BuildConfig/Artifactory/CleanupBranch.json
