@@ -1,0 +1,187 @@
+---
+name: Build and Test and Analyze and Package
+
+
+on:
+  #push:
+  #  branches: [main, develop, "release/**", "support/**", "hotfix/**"]
+  #pull_request:
+  #  branches: [main, develop, "release/**", "support/**", "hotfix/**"]
+  #  types: [opened, synchronize, reopened]
+
+  workflow_dispatch:
+    inputs:
+      build_test_create_package:
+        description: "Build, Test, Create package"
+        required: false
+        type: boolean
+        default: true
+      upload_package:
+        description: "Upload package"
+        required: false
+        type: boolean
+        default: true
+      test_coverage:
+        description: "Test coverage"
+        required: false
+        type: boolean
+        default: true
+      sonar_analysis:
+        description: "Sonar analysis"
+        required: false
+        type: boolean
+        default: true
+      static_analysis:
+        description: "Static analysis with Coverity"
+        required: false
+        type: boolean
+        default: true
+      documentation:
+        description: "Documentation"
+        required: false
+        type: boolean
+        default: true
+      blackduck_scan:
+        description: "BlackDuck"
+        required: false
+        type: boolean
+        default: true
+      tag:
+        description: "Tag branch"
+        required: false
+        type: boolean
+        default: false
+
+# cancel in progress jobs on pull request for new commits
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  versioning-output:
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-gitversioning.yml@9e8481af58785c34e992b511cd807e890d1f1398
+
+  lock:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    needs: versioning-output
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-conan-lock.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    secrets: inherit
+    with:
+      package_version: ${{ needs.versioning-output.outputs.package_version }}
+      package_user: ${{ needs.versioning-output.outputs.package_user }}
+      package_channel: ${{ needs.versioning-output.outputs.package_channel }}
+
+  build-test-package:
+    if: ${{ github.event.inputs.build_test_create_package != 'false' }}
+    needs:
+      - lock
+      - versioning-output
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-build-test-package.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    secrets: inherit
+    with:
+      package_version: ${{ needs.versioning-output.outputs.package_version }}
+      package_user: ${{ needs.versioning-output.outputs.package_user }}
+      package_channel: ${{ needs.versioning-output.outputs.package_channel }}
+      package_name: ${{ needs.lock.outputs.package_name }}
+      asan_build: "True"
+      upload_package: "False"
+      test_package_folder: ""
+
+  test-coverage-sonar-qube:
+    if: ${{ github.event.inputs.test_coverage != 'false' }}
+    needs:
+      - lock
+      - versioning-output
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-build-test-coverage-sonarqube.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    secrets: inherit
+    with:
+      package_version: ${{ needs.versioning-output.outputs.package_version }}
+      package_user: ${{ needs.versioning-output.outputs.package_user }}
+      package_channel: ${{ needs.versioning-output.outputs.package_channel }}
+      package_name: ${{ needs.lock.outputs.package_name }}
+      sonar_analysis: ${{ github.event.inputs.sonar_analysis != 'false' }}
+
+  static-analysis:
+    if: ${{ github.event.inputs.static_analysis != 'false' }}
+    needs:
+      - lock
+      - versioning-output
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-build-coverity.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    secrets: inherit
+    with:
+      package_version: ${{ needs.versioning-output.outputs.package_version }}
+      package_user: ${{ needs.versioning-output.outputs.package_user }}
+      package_channel: ${{ needs.versioning-output.outputs.package_channel }}
+      package_name: ${{ needs.lock.outputs.package_name }}
+      analysis_type: ${{ github.ref == 'refs/heads/develop' }}
+
+  build-documentation:
+    if: ${{ github.event.inputs.documentation != 'false' }}
+    needs:
+      - lock
+      - versioning-output
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-documentation-publish.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    secrets: inherit
+    with:
+      package_version: ${{ needs.versioning-output.outputs.package_version }}
+      package_user: ${{ needs.versioning-output.outputs.package_user }}
+      package_channel: ${{ needs.versioning-output.outputs.package_channel }}
+      package_name: ${{ needs.lock.outputs.package_name }}
+
+  blackduck_scan_cpp:
+    if: |
+       github.event.inputs.blackduck_scan != 'false' &&  
+       github.event.pull_request.user.login != 'dependabot[bot]' &&
+       (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+    needs:
+      - versioning-output
+    name: BlackDuck Source Scan for C++
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-blackduck-cpp.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    with:
+      blackduck_scan_full: true # Scan Mode. (true for intelligent scan & false for rapid scan)
+      project_name: "IGT-ReferenceApp-Cpp"
+      project_version_name: ${{ needs.versioning-output.outputs.package_version }}
+      source_path: "."
+    secrets:
+      BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCK_TOKEN }}
+
+  tag:
+    if: |
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/support' )) &&
+      github.event.inputs.tag != 'false'
+    needs:
+      - versioning-output
+    name: Tag main or support
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-tag-branch.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    with:
+      package_version: ${{ needs.versioning-output.outputs.package_version }}
+    secrets:
+      inherit
+
+  tag_release:
+    if:
+      startsWith(github.ref, 'refs/heads/release' ) &&
+      github.event.inputs.tag != 'false'
+    needs:
+      - versioning-output
+    name: Tag release
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-tag-branch.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    with:
+      package_version: ${{ needs.versioning-output.outputs.package_version }}
+      tag_prefix: "rc-"
+    secrets:
+      inherit
+
+  tag_develop:
+    if:
+      github.ref == 'refs/heads/develop' &&
+      github.event.inputs.tag != 'false'
+    needs:
+      - versioning-output
+    name: Tag develop
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-tag-branch.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    with:
+      package_version: ${{ needs.versioning-output.outputs.package_version }}
+      tag_prefix: "dev-"
+    secrets:
+      inherit
