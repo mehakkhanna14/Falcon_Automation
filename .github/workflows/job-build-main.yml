@@ -1,0 +1,102 @@
+name: Build Coranary App - main
+
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        description: "The name of the package"
+        required: true
+        type: string
+        default: "igts-a2d-app"
+        #default: "coranary_tools_app"
+      package_user:
+        description: "The user of the package"
+        required: false
+        type: string
+        default: "philips"
+      publish_package:
+        description: "Publish the package"
+        required: false
+        type: boolean
+        #default: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/support/')) }}
+        default: false
+      tag_commit:
+        description: "Tag the commit"
+        required: false
+        type: boolean
+        default: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/support/')) }}
+      nuget_package_repo:
+        description: "The NuGet package repository"
+        required: false
+        type: string
+        # TODO: Put new path
+        #default: "https://artifactory-ehv.ta.philips.com/artifactory/api/nuget/IGT-AppEngine"
+        default: "https://artifactory-ehv.ta.philips.com/artifactory/api/nuget/IGTS-CT-NewPath"
+      windows_docker_image:
+        description: "The Docker image to use for building on Windows"
+        required: false
+        type: string
+        #default: "dl-innersource-docker.artifactory-ehv.ta.philips.com/windows-msvc-2022-native:0.11-ltsc2022"
+        default: "dl-innersource-docker.artifactory-ehv.ta.philips.com/igt-appengine/windows:2.0.2" # VS 17.8 & .NET 4.8
+        #default: "dl-innersource-docker.artifactory-ehv.ta.philips.com/igt-appengine/windows:2.0.3"
+        #default: "dl-innersource-docker.artifactory-ehv.ta.philips.com/igt-appengine/windows"
+
+jobs:
+  versioning:
+    name: Versioning
+    #uses: ./.github/workflows/step-versioning.yml
+    uses: philips-internal/ae-workflow/.github/workflows/step-versioning.yml@v2.0
+
+  detect-workflow:
+    name: Detect Workflow
+    #uses: ./.github/workflows/step-detect-workflow.yml
+    uses: philips-internal/ae-workflow/.github/workflows/step-detect-workflow.yml@v2.0
+
+  generate-sbom:
+    name: Generate SBOM
+    needs: [versioning, detect-workflow]
+    #uses: ./.github/workflows/step-generate-sbom.yml
+    uses: philips-internal/ae-workflow/.github/workflows/step-generate-sbom.yml@v2.0
+    with:
+      package_version: ${{ needs.versioning.outputs.package_version }}
+
+  build-windows-conan:
+    name: Build Windows - Conan
+    needs: [versioning, generate-sbom, detect-workflow]
+    if: needs.detect-workflow.outputs.enable_windows_conan == 'true'
+    #uses: ./.github/workflows/step-build-windows-conan.yml
+    uses: philips-internal/ae-workflow/.github/workflows/step-build-windows-conan.yml@v2.0
+    with:
+      package_name: ${{ inputs.package_name }}
+      package_version: ${{ needs.versioning.outputs.package_version }}
+      package_user: ${{ inputs.package_user }}
+      package_channel: ${{ needs.versioning.outputs.package_channel }}
+      docker_image: ${{ inputs.windows_docker_image }}
+      publish_package: ${{ inputs.publish_package }}
+    secrets: inherit
+
+
+  generate-tag:
+    name: Generate Tag
+    if: ${{ inputs.tag_commit && always() }}
+    needs: [versioning, generate-sbom, build-windows-conan]
+    #needs: [versioning, generate-sbom, build-windows-nuget, build-windows-conan]
+    
+    runs-on: [self-hosted, philips-code-hub, x64, linux, ubuntu-latest]
+
+    steps:
+      - name: Collect Job Results
+        id: collect-job-result
+        run: |
+          create_tag=false
+          if [ "${{ needs.detect-workflow.outputs.enable_windows_conan }}" == "true" ] && [ "${{ needs.build-windows-conan.result }}" == "success" ]; then
+            create_tag=true
+          fi
+          echo "create_tag=$create_tag" >> $GITHUB_OUTPUT
+
+      - name: Create Tag
+        if: ${{ steps.collect-job-result.outputs.create_tag }}
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          custom_tag: ${{ needs.versioning.outputs.package_version }}
