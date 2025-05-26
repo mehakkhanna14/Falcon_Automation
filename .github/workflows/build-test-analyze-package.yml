@@ -106,9 +106,8 @@ jobs:
     needs:
       - lock
       - versioning-output
-    #uses: philips-internal/igt-buildtools/.github/workflows/rw-build-coverity.yml@9e8481af58785c34e992b511cd807e890d1f1398
-    uses: philips-internal/igt-buildtools/.github/workflows/rw-build-test-coverage-sonarqube.yml@9e8481af58785c34e992b511cd807e890d1f1398
-
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-build-coverity.yml@9e8481af58785c34e992b511cd807e890d1f1398
+   
     secrets: inherit
     with:
       package_version: ${{ needs.versioning-output.outputs.package_version }}
