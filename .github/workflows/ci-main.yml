@@ -1,0 +1,64 @@
+name: CI-main
+
+on:
+  workflow_dispatch:
+  #push:
+  #  branches:
+  #    - develop
+  #    - main
+      
+  #pull_request:
+  #  branches:
+  #    - develop
+  #    - main
+  #  types: [opened, synchronize, reopened]
+
+  push:
+    branches: [develop, main]
+
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    uses: philips-internal/ae-workflow/.github/workflows/job-checks.yml@v2.0
+    secrets: inherit
+
+  build:
+    name: Build
+    #uses: philips-internal/igts-coronarytools/.github/workflows/job-crt-build.yml@v0.0.1
+    #uses: ./.github/workflows/job-crt-build.yml
+    #uses: ./.github/workflows/reusable-workflow-1.yml
+    #uses: philips-internal/ae-workflow/.github/workflows/job-build.yml@v2.0
+    uses: ./.github/workflows/job-build-main.yml
+    with:
+      package_name: "igts-a2d-app"
+      #package_name: "coranary_tools_app"
+    secrets: inherit
+
+
+  lint:
+    name: Lint
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    uses: philips-internal/ae-workflow/.github/workflows/job-lint.yml@v2.0
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    secrets: inherit
+
+  status:
+    needs: [check, build, lint]
+    name: Status
+    uses: philips-internal/ae-workflow/.github/workflows/job-status.yml@v2.0
+    with:
+      job_status: |
+        ${{ needs.check.result }}
+        ${{ needs.build.result }}
+        ${{ needs.lint.result }}
