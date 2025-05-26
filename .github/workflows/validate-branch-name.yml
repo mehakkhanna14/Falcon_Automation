@@ -1,0 +1,22 @@
+---
+name: Branch Name Validation
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - "support/**"
+      - "release/**"
+    tags-ignore:
+      - '**'
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+    branches-ignore:
+      - main
+      - "support/**"
+
+  workflow_dispatch:
+
+jobs:
+  branch-name-check:
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-validate-branch-name.yml@9e8481af58785c34e992b511cd807e890d1f1398
