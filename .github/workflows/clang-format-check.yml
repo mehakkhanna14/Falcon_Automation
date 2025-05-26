@@ -1,0 +1,14 @@
+---
+name: Clang-Format-Check
+
+on:
+  push:
+    tags-ignore:
+      - '**'
+  pull_request:
+
+  workflow_dispatch:
+
+jobs:
+  clang-format-check:
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-clang-format-check.yml@9e8481af58785c34e992b511cd807e890d1f1398
