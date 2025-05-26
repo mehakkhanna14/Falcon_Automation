@@ -1,0 +1,13 @@
+---
+name: Commit Message Validation
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+  workflow_dispatch:
+
+jobs:
+  check-commit-message:
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-validate-commit-message.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    secrets: inherit
