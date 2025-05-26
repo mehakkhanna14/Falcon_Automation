@@ -1,0 +1,28 @@
+---
+# MegaLinter GitHub Action configuration file
+# More info at https://megalinter.github.io
+name: MegaLinter
+
+on:
+  # Trigger mega-linter at every push. Action will also be visible from Pull Requests to master
+  push: # Comment this line to trigger action only on pull-requests (not recommended if you don't pay for GH Actions)
+    branches: [develop, main, "release/**", "support/**", "hotfix/**"]
+    tags-ignore:
+      - '**'
+  pull_request:
+    branches: [develop, main, "release/**", "support/**", "hotfix/**"]
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    uses: philips-internal/igt-buildtools/.github/workflows/rw-mega-linter.yml@9e8481af58785c34e992b511cd807e890d1f1398
+    secrets:
+      github_app_id: ${{ secrets.APP_ID }}
+      github_app_private_key: ${{ secrets.APP_BASE64_PRIVATE_KEY }}
